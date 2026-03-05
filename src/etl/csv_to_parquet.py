@@ -122,7 +122,7 @@ def run_conversion(input_path=None, output_path=None):
         # Write partitioned Parquet first (no caching to save memory)
         logger.info(f"Writing Parquet to {output_path}...")
         df.write \
-            .mode("overwrite") 
+            .mode("overwrite") \
             .partitionBy("year", "month", "stock_symbol") \
             .option("compression", SPARK_CONFIG["compression_codec"]) \
             .parquet(output_path)
