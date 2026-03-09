@@ -14,20 +14,26 @@ LOGS_DIR = os.path.join(BASE_DIR, "logs")
 RAW_CSV_PATH = os.path.join(DATA_DIR, "stock-market-data")
 PARQUET_PATH = os.path.join(DATA_DIR, "stock-market-data-parquet")
 ENGINEERED_PATH = os.path.join(DATA_DIR, "stock-market-data-engineered")
+FINAL_PATH = os.path.join(DATA_DIR, "stock-market-data-final")
+LSH_PATH = os.path.join(DATA_DIR, "lsh-similarity")
 
 
 SPARK_CONFIG = {
     "app_name": "StockMarketAnalysis",
-    "master": "local[*]",
-    "driver_memory": "8g",
-    "executor_memory": "18g",
+    # local[4]: gioi han 4 tasks dong thoi, moi task can ~400MB cho Window buffer
+    # local[*]=16 cores => 16*400MB=6.4GB Window + overhead => OOM tren 32GB RAM
+    # local[4] => 4*400MB=1.6GB Window, du headroom cho 24g heap
+    "master": "local[4]",
+    "driver_memory": "24g",
+    "executor_memory": "24g",
     "max_result_size": "4g",
     "spark.memory.fraction": "0.8",
-    "spark.memory.storageFraction": "0.3",
-    "spark.sql.shuffle.partitions": "32",
+    "spark.memory.storageFraction": "0.2",
+    "spark.sql.shuffle.partitions": "200",
     "adaptive_enabled": "true",
     "coalesce_partitions_enabled": "true",
-    "compression_codec": "snappy"
+    "compression_codec": "snappy",
+    "window_spill_threshold": "4096",
 }
 
 JAVA_HOME = os.environ.get("JAVA_HOME", "/opt/jdk-17.0.18")
@@ -88,6 +94,30 @@ FEATURE_COLUMNS = (
 
 
 PARTITION_COLUMNS = ["year", "month", "stock_symbol"]
+
+FEATURE_GROUPS = {
+    "pca_input": [
+        "sma5", "sma10", "sma15", "sma20", "ema5", "ema10", "ema15", "ema20",
+        "upperband", "middleband", "lowerband", "HT_TRENDLINE",
+        "KAMA10", "KAMA20", "KAMA30", "SAR", "TRIMA5", "TRIMA10", "TRIMA20",
+        "ADX5", "ADX10", "ADX20", "APO", "CCI5", "CCI10", "CCI15",
+        "macd510", "macd520", "macd1020", "macd1520", "macd1226",
+        "MOM10", "MOM15", "MOM20", "ROC5", "ROC10", "ROC20", "PPO",
+        "RSI14", "RSI8", "slowk", "slowd", "fastk", "fastd", "fastksr", "fastdsr",
+        "ULTOSC", "WILLR", "ATR", "Trange", "TYPPRICE", "HT_DCPERIOD", "BETA",
+        "dist_sma20", "dist_sma_diff", "bb_width", "pct_b", "volatility_atr_pct",
+        "daily_range_pct", "log_return",
+    ],
+    "lsh_fingerprint": [
+        "rsi_status_num", "trend_ema_cross", "stoch_k_d_cross",
+        "roc_trend", "is_high_volatility", "macd_cross_signal",
+        "bb_position_label", "adx_strength_label",
+    ],
+    "association_items": [
+        "rsi_status", "bb_position_label", "macd_cross_signal",
+        "trend_ema_cross", "adx_strength_label", "is_high_volatility",
+    ],
+}
 
 # Data quality thresholds
 QUALITY_THRESHOLDS = {
