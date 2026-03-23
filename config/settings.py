@@ -16,6 +16,7 @@ PARQUET_PATH = os.path.join(DATA_DIR, "stock-market-data-parquet")
 ENGINEERED_PATH = os.path.join(DATA_DIR, "stock-market-data-engineered")
 FINAL_PATH = os.path.join(DATA_DIR, "stock-market-data-final")
 LSH_PATH = os.path.join(DATA_DIR, "lsh-similarity")
+VN_RAW_CSV_PATH = os.path.join(DATA_DIR, "stock-market-data-vn")
 
 
 SPARK_CONFIG = {
