@@ -17,6 +17,18 @@ ENGINEERED_PATH = os.path.join(DATA_DIR, "stock-market-data-engineered")
 FINAL_PATH = os.path.join(DATA_DIR, "stock-market-data-final")
 LSH_PATH = os.path.join(DATA_DIR, "lsh-similarity")
 VN_RAW_CSV_PATH = os.path.join(DATA_DIR, "stock-market-data-vn")
+LSH_BENCHMARK_REPORTS_DIR = os.path.join(REPORTS_DIR, "lsh-benchmark")
+
+LSH_CONFIG = {
+    "window_days": 20,
+    "k_shingle": 2,
+    "n_hash": 100,
+    "n_bands": 20,
+    "rows_per_band": 5,
+    "benchmark_n_queries": 1000,
+    "benchmark_top_k": 10,
+    "benchmark_seed": 42,
+}
 
 
 SPARK_CONFIG = {
