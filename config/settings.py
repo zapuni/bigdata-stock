@@ -18,6 +18,8 @@ FINAL_PATH = os.path.join(DATA_DIR, "stock-market-data-final")
 LSH_PATH = os.path.join(DATA_DIR, "lsh-similarity")
 VN_RAW_CSV_PATH = os.path.join(DATA_DIR, "stock-market-data-vn")
 LSH_BENCHMARK_REPORTS_DIR = os.path.join(REPORTS_DIR, "lsh-benchmark")
+PCA_OUTPUT_PATH = os.path.join(DATA_DIR, "pca-clustering")
+PCA_REPORTS_DIR = os.path.join(REPORTS_DIR, "pca-clustering")
 
 LSH_CONFIG = {
     "window_days": 20,
@@ -28,6 +30,16 @@ LSH_CONFIG = {
     "benchmark_n_queries": 1000,
     "benchmark_top_k": 10,
     "benchmark_seed": 42,
+}
+
+PCA_CONFIG = {
+    "variance_threshold": 0.90,
+    "k_default": 15,
+    "kmeans_k": 6,
+    "elbow_k_range": (2, 10),
+    "cure_n_rep": 10,
+    "cure_alpha": 0.2,
+    "random_seed": 42,
 }
 
 
