@@ -23,6 +23,7 @@ dependencies:
   - jupyter=1.1.1
   - ipykernel=6.29.5
   - ipywidgets=8.1.5
+  - python-louvain=0.16
   - pip
   - pip:
       - pyspark==4.0.0
