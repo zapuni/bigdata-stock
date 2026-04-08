@@ -20,6 +20,24 @@ VN_RAW_CSV_PATH = os.path.join(DATA_DIR, "stock-market-data-vn")
 LSH_BENCHMARK_REPORTS_DIR = os.path.join(REPORTS_DIR, "lsh-benchmark")
 PCA_OUTPUT_PATH = os.path.join(DATA_DIR, "pca-clustering")
 PCA_REPORTS_DIR = os.path.join(REPORTS_DIR, "pca-clustering")
+GRAPH_OUTPUT_PATH = os.path.join(DATA_DIR, "graph-pagerank")
+GRAPH_REPORTS_DIR = os.path.join(REPORTS_DIR, "graph-pagerank")
+
+GRAPH_CONFIG = {
+    "corr_threshold": 0.5,
+    "pagerank_alpha": 0.85,
+    "pagerank_max_iter": 200,
+    "pagerank_tol": 1e-6,
+    "log_return_col": "log_return",
+    "date_col": "trade_date",
+    "stock_col": "stock_symbol",
+    "min_periods": 100,
+    "min_stocks_per_day_pct": 0.5,
+    "top_n_display": 20,
+    "heatmap_top_n": 30,
+    "network_top_n": 40,
+    "network_edge_min_weight": 0.65,
+}
 
 LSH_CONFIG = {
     "window_days": 20,
