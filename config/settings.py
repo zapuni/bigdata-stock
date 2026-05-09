@@ -17,6 +17,12 @@ ENGINEERED_PATH = os.path.join(DATA_DIR, "stock-market-data-engineered")
 FINAL_PATH = os.path.join(DATA_DIR, "stock-market-data-final")
 LSH_PATH = os.path.join(DATA_DIR, "lsh-similarity")
 VN_RAW_CSV_PATH = os.path.join(DATA_DIR, "stock-market-data-vn")
+VN_FINAL_PATH = os.path.join(DATA_DIR, "stock-market-data-vn-final")
+
+# --- Phương án A: Cảnh báo theo tiền lệ (Similarity Search) ---
+# Artifacts: feature vectors (Ấn Độ + VN) + SimHash index (Ấn Độ) + hyperplanes
+PRECEDENT_PATH = os.path.join(DATA_DIR, "precedent-alert")
+PRECEDENT_REPORTS_DIR = os.path.join(REPORTS_DIR, "precedent-alert")
 LSH_BENCHMARK_REPORTS_DIR = os.path.join(REPORTS_DIR, "lsh-benchmark")
 PCA_OUTPUT_PATH = os.path.join(DATA_DIR, "pca-clustering")
 PCA_REPORTS_DIR = os.path.join(REPORTS_DIR, "pca-clustering")
@@ -49,6 +55,51 @@ LSH_CONFIG = {
     "benchmark_top_k": 10,
     "benchmark_seed": 42,
 }
+
+# =========================================================================
+# PHƯƠNG ÁN A: CẢNH BÁO THEO TIỀN LỆ (cosine similarity + SimHash LSH)
+# =========================================================================
+# Ý tưởng: mô tả pattern 20 ngày của 1 (cổ phiếu, ngày) bằng 1 feature vector,
+# tìm các tiền lệ GIỐNG NHẤT trong quá khứ (Ấn Độ qua SimHash, VN qua cosine
+# exact), thống kê kết quả 3 ngày sau → hợp nhất thành 1 risk score.
+PRECEDENT_CONFIG = {
+    # --- Pattern & nhãn kết quả ---
+    "window_days": 20,          # số ngày giao dịch tạo thành 1 pattern
+    "horizon_days": 3,          # nhìn kết quả bao nhiêu ngày sau (next_3d)
+    "down_threshold": 0.0,      # fwd_return < ngưỡng này => coi là "giảm"
+
+    # --- Hybrid feature vector ---
+    # Phần "hình dạng": chuỗi daily_return 20 ngày, z-score TRONG cửa sổ
+    #   (scale-invariant, chỉ giữ hình dạng biến động).
+    # Phần "tóm tắt": các đặc trưng dưới, z-score THEO TỪNG THỊ TRƯỜNG.
+    "summary_features": [
+        "cum_return",     # cộng dồn lợi suất 20 ngày
+        "volatility",     # độ lệch chuẩn của daily_return trong cửa sổ
+        "volume_ratio",   # volume ngày cuối / volume trung bình cửa sổ
+        "rsi",            # RSI14 ngày cuối
+        "macd",           # macd1226 ngày cuối (đã chuẩn hoá theo giá)
+        "sma_gap",        # (close - sma20) / sma20 ngày cuối
+    ],
+
+    # --- SimHash LSH (random hyperplane cho cosine) ---
+    # Tổng số hyperplane = band_bits * n_bands. Hai vector là "candidate"
+    # nếu trùng HẾT trên ít nhất 1 band → sau đó tính cosine exact để xếp hạng.
+    "simhash_band_bits": 10,    # số bit mỗi band (r)
+    "simhash_n_bands": 12,      # số band (L) — tăng recall
+    "random_seed": 42,
+
+    # --- Truy vấn & thống kê ---
+    "top_k": 50,                # số tiền lệ giống nhất lấy ra để thống kê
+    "ci_z": 1.96,               # z cho khoảng tin cậy Wilson 95%
+
+    # --- Hợp nhất tín hiệu (Step 7) ---
+    # Khi mẫu càng nhiều + khoảng tin cậy càng chặt → trọng số càng lớn.
+    # Khi Ấn Độ và VN mâu thuẫn → ưu tiên VN (nhân trọng số cao hơn).
+    "vn_priority_weight": 1.5,  # hệ số ưu tiên VN khi hợp nhất
+    "risk_caution_threshold": 40,   # >= : THẬN TRỌNG
+    "risk_strong_threshold": 65,    # >= : CẢNH BÁO MẠNH
+}
+
 
 PCA_CONFIG = {
     "variance_threshold": 0.90,
