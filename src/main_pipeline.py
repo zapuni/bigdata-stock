@@ -16,6 +16,7 @@ import sys
 import time
 import logging
 import glob
+import argparse
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
@@ -30,7 +31,8 @@ from pyspark.sql.functions import (
 )
 
 from config.settings import (
-    RAW_CSV_PATH, FINAL_PATH, SPARK_CONFIG, LOGS_DIR,
+    RAW_CSV_PATH, FINAL_PATH, VN_RAW_CSV_PATH, VN_FINAL_PATH,
+    SPARK_CONFIG, LOGS_DIR,
     get_csv_schema, FEATURE_GROUPS,
 )
 from features import (
@@ -95,11 +97,11 @@ def _suppress_spark_warnings(spark: SparkSession) -> None:
 # PIPELINE STEPS
 # =========================================================================
 
-def step_extract(spark: SparkSession):
-    """EXTRACT: Doc 101 file CSV tho voi schema co dinh."""
-    csv_pattern = os.path.join(RAW_CSV_PATH, "*.csv")
+def step_extract(spark: SparkSession, raw_csv_path: str):
+    """EXTRACT: Doc CSV tho voi schema co dinh (dung chung An Do + VN)."""
+    csv_pattern = os.path.join(raw_csv_path, "*.csv")
     csv_files = glob.glob(csv_pattern)
-    log.info("STEP 1 EXTRACT  | %d CSV files from %s", len(csv_files), RAW_CSV_PATH)
+    log.info("STEP 1 EXTRACT  | %d CSV files from %s", len(csv_files), raw_csv_path)
 
     df = (
         spark.read
@@ -168,9 +170,9 @@ def step_transform(df):
     return df
 
 
-def step_load(df):
+def step_load(df, final_path: str):
     """LOAD: Ghi Parquet partitioned theo year/month/stock_symbol."""
-    log.info("STEP 5 LOAD     | Writing to %s", FINAL_PATH)
+    log.info("STEP 5 LOAD     | Writing to %s", final_path)
     log.info("STEP 5 LOAD     | Partition by: year / month / stock_symbol")
 
     (
@@ -178,16 +180,16 @@ def step_load(df):
         .mode("overwrite")
         .partitionBy("year", "month", "stock_symbol")
         .option("compression", SPARK_CONFIG["compression_codec"])
-        .parquet(FINAL_PATH)
+        .parquet(final_path)
     )
     log.info("STEP 5 LOAD     | Write complete")
 
 
-def step_verify(spark: SparkSession):
+def step_verify(spark: SparkSession, final_path: str):
     """VERIFY: Doc lai Parquet, kiem tra row count, schema, partition pruning."""
-    log.info("STEP 6 VERIFY   | Reading back Parquet from %s", FINAL_PATH)
+    log.info("STEP 6 VERIFY   | Reading back Parquet from %s", final_path)
 
-    df = spark.read.parquet(FINAL_PATH)
+    df = spark.read.parquet(final_path)
     total = df.count()
     log.info("STEP 6 VERIFY   | Total rows: %s | Total cols: %d", f"{total:,}", len(df.columns))
 
@@ -208,29 +210,26 @@ def step_verify(spark: SparkSession):
         f"{nulls['close_zscore']:,}",
     )
 
-    df.createOrReplaceTempView("stocks_final")
-
-    t0 = time.time()
-    r1 = spark.sql(
-        "SELECT COUNT(*) c FROM stocks_final "
-        "WHERE year=2022 AND month=1 AND stock_symbol='HDFC'"
-    ).collect()
-    log.info(
-        "STEP 6 VERIFY   | Partition query (1 stock, 1 month): %s rows in %.3fs",
-        f"{r1[0]['c']:,}", time.time() - t0,
+    # Sanity query: lay 1 (stock, year) bat ky co trong data de minh hoa
+    # partition pruning -- khong hardcode symbol de dung chung An Do + VN.
+    sample = (
+        df.groupBy("year", "stock_symbol")
+        .agg(count("*").alias("c"))
+        .orderBy(col("c").desc())
+        .limit(1)
+        .collect()
     )
+    if sample:
+        s_year, s_stock, s_cnt = sample[0]["year"], sample[0]["stock_symbol"], sample[0]["c"]
+        t0 = time.time()
+        r1 = df.filter(
+            (col("year") == s_year) & (col("stock_symbol") == s_stock)
+        ).count()
+        log.info(
+            "STEP 6 VERIFY   | Partition query (%s, %s): %s rows in %.3fs",
+            s_stock, s_year, f"{r1:,}", time.time() - t0,
+        )
 
-    t0 = time.time()
-    r2 = spark.sql(
-        "SELECT stock_symbol, COUNT(*) c FROM stocks_final "
-        "WHERE year=2022 GROUP BY stock_symbol ORDER BY c DESC"
-    ).collect()
-    log.info(
-        "STEP 6 VERIFY   | Cross-stock query (all stocks, 1 year): %d stocks in %.3fs",
-        len(r2), time.time() - t0,
-    )
-
-    log.info("STEP 6 VERIFY   | Schema: %s", df.columns)
     log.info(
         "STEP 6 VERIFY   | Feature groups available: pca_input=%d cols, "
         "lsh_fingerprint=%d cols, association_items=%d cols",
@@ -246,9 +245,33 @@ def step_verify(spark: SparkSession):
 # =========================================================================
 
 def main():
+    parser = argparse.ArgumentParser(description="Stock ETL pipeline (India / VN)")
+    parser.add_argument(
+        "--market", choices=["india", "vn"], default="india",
+        help="Thi truong can ETL: india (mac dinh) hoac vn",
+    )
+    parser.add_argument(
+        "--input", default=None,
+        help="Ghi de duong dan CSV tho (mac dinh theo --market)",
+    )
+    parser.add_argument(
+        "--output", default=None,
+        help="Ghi de duong dan Parquet output (mac dinh theo --market)",
+    )
+    args = parser.parse_args()
+
+    if args.market == "vn":
+        raw_csv_path = args.input or VN_RAW_CSV_PATH
+        final_path = args.output or VN_FINAL_PATH
+    else:
+        raw_csv_path = args.input or RAW_CSV_PATH
+        final_path = args.output or FINAL_PATH
+
     total_start = time.time()
     log.info("=" * 65)
-    log.info("STOCK BIG DATA - MAIN ETL PIPELINE")
+    log.info("STOCK BIG DATA - MAIN ETL PIPELINE | market=%s", args.market)
+    log.info("Input : %s", raw_csv_path)
+    log.info("Output: %s", final_path)
     log.info("=" * 65)
 
     spark = create_spark()
@@ -256,12 +279,12 @@ def main():
     log.info("Spark version: %s | cores: %d", spark.version, spark.sparkContext.defaultParallelism)
 
     try:
-        df = step_extract(spark)
+        df = step_extract(spark, raw_csv_path)
         df = step_enrich(df)
         df = step_clean(df)
         df = step_transform(df)
-        step_load(df)
-        step_verify(spark)
+        step_load(df, final_path)
+        step_verify(spark, final_path)
 
         elapsed = time.time() - total_start
         log.info("=" * 65)
