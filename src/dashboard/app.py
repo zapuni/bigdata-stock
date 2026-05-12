@@ -34,6 +34,7 @@ from config.settings import (
 )
 from similarity import PrecedentEngine
 from analysis.anomaly import compute_anomalies, summarize_anomalies
+from analysis.portfolio import build_portfolios, portfolio_metrics  # noqa: F401
 from similarity.signal_fusion import LABEL_SAFE, LABEL_CAUTION, LABEL_STRONG
 
 logging.basicConfig(level=logging.WARNING)
@@ -80,6 +81,16 @@ def _load_daily_close(market: str) -> pd.DataFrame:
     if not os.path.isdir(vdir):
         return pd.DataFrame()
     return pd.read_parquet(vdir, columns=["stock_symbol", "trade_date", "close"])
+
+
+@st.cache_data(show_spinner=False)
+def _build_portfolio_demo():
+    """Dựng danh mục từ cluster + daily close India (cache)."""
+    close = _load_daily_close("india")
+    clusters = _read_csv(os.path.join(PCA_REPORTS_DIR, "cluster_assignments.csv"))
+    if close.empty or clusters is None:
+        return None
+    return build_portfolios(close, clusters)
 
 
 @st.cache_data(show_spinner=False)
@@ -457,6 +468,39 @@ def page_clustering():
             counts = df[cluster_col].value_counts().sort_index()
             st.bar_chart(counts)
         st.dataframe(df, use_container_width=True, hide_index=True, height=300)
+
+    # ----- Danh mục từ cụm (Portfolio Optimization) -----
+    st.divider()
+    st.subheader("💼 Danh mục đầu tư xây từ cụm")
+    pf = _build_portfolio_demo()
+    if pf is None:
+        st.info("Chưa đủ dữ liệu (cần cluster_assignments.csv + vectors Ấn Độ).")
+    else:
+        reps = pf["representatives"]
+        st.caption("Đại diện mỗi cụm (gần tâm cụm nhất): "
+                   + ", ".join(f"cụm {c}→{s}" for c, s in sorted(reps.items())))
+
+        # Đường vốn 3 danh mục
+        eq = pf["equity"]
+        figpf = go.Figure()
+        for col in eq.columns:
+            figpf.add_trace(go.Scatter(x=eq.index, y=eq[col], mode="lines", name=col))
+        figpf.update_layout(height=360, title="Đường vốn (1 đồng ban đầu)",
+                            margin=dict(l=8, r=8, t=40, b=8),
+                            legend=dict(orientation="h", y=-0.2))
+        st.plotly_chart(figpf, use_container_width=True)
+
+        # Bảng metrics
+        mt = pd.DataFrame(pf["metrics"]).T
+        mt = mt.rename(columns={
+            "cum_return": "Tổng lời", "ann_return": "Lời/năm",
+            "ann_vol": "Biến động/năm", "sharpe": "Sharpe",
+            "max_drawdown": "Sụt sâu nhất"})
+        st.dataframe(
+            mt.style.format({"Tổng lời": "{:+.1%}", "Lời/năm": "{:+.1%}",
+                             "Biến động/năm": "{:.1%}", "Sharpe": "{:.2f}",
+                             "Sụt sâu nhất": "{:.1%}"}),
+            use_container_width=True)
 
 
 # ---------------------------------------------------------------------------
